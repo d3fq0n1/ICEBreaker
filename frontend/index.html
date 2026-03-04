@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ICEBreaker — Signal Mirror</title>
+
+  <!-- Leaflet (CDN, pinned version) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 0.6rem 1rem;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header h1 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #58a6ff;
+    }
+
+    header .subtitle {
+      font-size: 0.75rem;
+      color: #8b949e;
+    }
+
+    #map {
+      flex: 1;
+      z-index: 0;
+    }
+
+    /* --- Report panel --- */
+    #panel {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      width: 300px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 1rem;
+      z-index: 1000;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    }
+
+    #panel h2 { font-size: 0.875rem; margin-bottom: 0.75rem; color: #58a6ff; }
+
+    .form-row { margin-bottom: 0.5rem; }
+
+    label { display: block; font-size: 0.75rem; color: #8b949e; margin-bottom: 0.25rem; }
+
+    .tag-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .tag-btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #c9d1d9;
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .tag-btn.active {
+      background: #1f6feb;
+      border-color: #58a6ff;
+      color: #fff;
+    }
+
+    textarea {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #e6edf3;
+      font-size: 0.8rem;
+      padding: 0.4rem;
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    textarea:focus { outline: none; border-color: #58a6ff; }
+
+    #coords-display {
+      font-size: 0.7rem;
+      color: #8b949e;
+      font-family: monospace;
+      margin-bottom: 0.5rem;
+    }
+
+    #submit-btn {
+      width: 100%;
+      background: #238636;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.55rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    #submit-btn:hover { background: #2ea043; }
+    #submit-btn:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+
+    #status-msg {
+      font-size: 0.72rem;
+      margin-top: 0.4rem;
+      min-height: 1rem;
+      color: #3fb950;
+    }
+
+    #status-msg.error { color: #f85149; }
+
+    .ttl-bar {
+      height: 3px;
+      background: #238636;
+      border-radius: 2px;
+      transition: width 1s linear;
+    }
+
+    /* Leaflet popup override */
+    .leaflet-popup-content-wrapper {
+      background: #161b22;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+    }
+    .leaflet-popup-tip { background: #161b22; }
+    .leaflet-popup-content { font-size: 0.8rem; }
+    .popup-tags { margin-top: 0.3rem; display: flex; flex-wrap: wrap; gap: 0.2rem; }
+    .popup-tag {
+      background: #1f6feb;
+      border-radius: 3px;
+      padding: 0.1rem 0.4rem;
+      font-size: 0.65rem;
+    }
+    .popup-ttl { margin-top: 0.4rem; color: #8b949e; font-size: 0.7rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>ICEBreaker</h1>
+  <span class="subtitle">Signal Mirror · I-90/I-94 Corridor · Pins expire in 15 min</span>
+</header>
+
+<div id="map"></div>
+
+<div id="panel">
+  <h2>Report a Sighting</h2>
+  <div id="coords-display">Click the map to set location</div>
+
+  <div class="form-row">
+    <label>Tags</label>
+    <div class="tag-grid" id="tag-grid"></div>
+  </div>
+
+  <div class="form-row">
+    <label>Note (optional, 280 chars max)</label>
+    <textarea id="note-input" maxlength="280" placeholder="e.g. 3 vehicles, northbound shoulder…"></textarea>
+  </div>
+
+  <button id="submit-btn" disabled>Select a location first</button>
+  <div id="status-msg"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+const API = "/api";
+const POLL_MS = 30_000;  // refresh pins every 30s
+const TAGS = [
+  "checkpoint", "vehicles", "foot_patrol",
+  "air_asset", "road_block", "medical_delay", "clear"
+];
+const TAG_COLORS = {
+  checkpoint:    "#e3b341",
+  vehicles:      "#f0883e",
+  foot_patrol:   "#f0883e",
+  air_asset:     "#a5d6ff",
+  road_block:    "#f85149",
+  medical_delay: "#ff7b72",
+  clear:         "#3fb950",
+};
+
+// ---------------------------------------------------------------------------
+// Map init — centered on WI/I-90-94 corridor
+// ---------------------------------------------------------------------------
+const map = L.map("map", { zoomControl: true }).setView([44.0, -90.0], 7);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 18,
+}).addTo(map);
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let selectedLatLng = null;
+let activeTags = new Set();
+let activeMarkers = {};  // id -> marker
+
+// ---------------------------------------------------------------------------
+// Tag buttons
+// ---------------------------------------------------------------------------
+const tagGrid = document.getElementById("tag-grid");
+TAGS.forEach(tag => {
+  const btn = document.createElement("button");
+  btn.className = "tag-btn";
+  btn.textContent = tag.replace("_", " ");
+  btn.dataset.tag = tag;
+  btn.addEventListener("click", () => {
+    btn.classList.toggle("active");
+    activeTags.has(tag) ? activeTags.delete(tag) : activeTags.add(tag);
+  });
+  tagGrid.appendChild(btn);
+});
+
+// ---------------------------------------------------------------------------
+// Map click → set location
+// ---------------------------------------------------------------------------
+let crosshair = null;
+
+map.on("click", e => {
+  selectedLatLng = e.latlng;
+  document.getElementById("coords-display").textContent =
+    `${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+
+  if (crosshair) crosshair.remove();
+  crosshair = L.circleMarker(e.latlng, {
+    radius: 8, color: "#58a6ff", fillColor: "#58a6ff",
+    fillOpacity: 0.4, weight: 2,
+  }).addTo(map);
+
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = false;
+  btn.textContent = "Submit Sighting";
+});
+
+// ---------------------------------------------------------------------------
+// Submit
+// ---------------------------------------------------------------------------
+document.getElementById("submit-btn").addEventListener("click", async () => {
+  if (!selectedLatLng) return;
+
+  const btn = document.getElementById("submit-btn");
+  const statusEl = document.getElementById("status-msg");
+  btn.disabled = true;
+  btn.textContent = "Submitting…";
+  statusEl.className = "";
+  statusEl.textContent = "";
+
+  const payload = {
+    lat: selectedLatLng.lat,
+    lon: selectedLatLng.lng,
+    tags: [...activeTags],
+    note: document.getElementById("note-input").value.trim(),
+  };
+
+  try {
+    const resp = await fetch(`${API}/sightings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || resp.statusText);
+    }
+    const data = await resp.json();
+    statusEl.textContent = `Posted. Expires in ${Math.round(data.ttl_remaining / 60)} min.`;
+
+    // Reset form
+    if (crosshair) { crosshair.remove(); crosshair = null; }
+    selectedLatLng = null;
+    activeTags.clear();
+    document.querySelectorAll(".tag-btn.active").forEach(b => b.classList.remove("active"));
+    document.getElementById("note-input").value = "";
+    btn.disabled = true;
+    btn.textContent = "Select a location first";
+
+    await loadSightings();
+  } catch (e) {
+    statusEl.className = "error";
+    statusEl.textContent = `Error: ${e.message}`;
+    btn.disabled = false;
+    btn.textContent = "Submit Sighting";
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Load and render sightings
+// ---------------------------------------------------------------------------
+function makeIcon(tags) {
+  const color = tags.length > 0
+    ? (TAG_COLORS[tags[0]] || "#8b949e")
+    : "#8b949e";
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="36" viewBox="0 0 24 36">
+      <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24C24 5.37 18.63 0 12 0z"
+            fill="${color}" stroke="#0d1117" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="5" fill="#0d1117" fill-opacity="0.5"/>
+    </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: "",
+    iconSize: [24, 36],
+    iconAnchor: [12, 36],
+    popupAnchor: [0, -36],
+  });
+}
+
+function formatTTL(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+async function loadSightings() {
+  try {
+    const resp = await fetch(`${API}/sightings`);
+    if (!resp.ok) return;
+    const sightings = await resp.json();
+
+    const incoming = new Set(sightings.map(s => s.id));
+
+    // Remove expired markers
+    for (const [id, marker] of Object.entries(activeMarkers)) {
+      if (!incoming.has(id)) {
+        map.removeLayer(marker);
+        delete activeMarkers[id];
+      }
+    }
+
+    // Add/update markers
+    sightings.forEach(s => {
+      if (activeMarkers[s.id]) return;  // already on map
+
+      const marker = L.marker([s.lat, s.lon], { icon: makeIcon(s.tags) });
+
+      const tagsHtml = s.tags.map(t =>
+        `<span class="popup-tag">${t.replace("_", " ")}</span>`
+      ).join("");
+
+      marker.bindPopup(`
+        <div>
+          <div class="popup-tags">${tagsHtml || "<em style='color:#8b949e'>no tags</em>"}</div>
+          ${s.note ? `<div style="margin-top:0.3rem">${escapeHtml(s.note)}</div>` : ""}
+          <div class="popup-ttl">Expires in ${formatTTL(s.ttl_remaining)}</div>
+        </div>
+      `);
+
+      marker.addTo(map);
+      activeMarkers[s.id] = marker;
+    });
+  } catch (_) {
+    // silent fail on poll — don't disrupt UX
+  }
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Initial load + polling
+loadSightings();
+setInterval(loadSightings, POLL_MS);
+</script>
+</body>
+</html>
