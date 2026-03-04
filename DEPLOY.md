@@ -4,6 +4,23 @@ Tested on Ubuntu 22.04 / Debian 12.
 
 ---
 
+## Hosting recommendations
+
+**Iceland is the recommended jurisdiction** for this project due to:
+- The [IMMI framework](https://en.wikipedia.org/wiki/Icelandic_Modern_Media_Initiative) — designed as a safe harbor for publishers and journalists
+- Outside direct US legal jurisdiction; cross-border demands require MLAT, a slow and high-bar process
+- EEA/GDPR-aligned data minimization rules (this app already satisfies them by design)
+
+Recommended Icelandic providers:
+- **[1984 Hosting](https://www.1984hosting.com/)** — explicit commitment to free speech and privacy, used by journalists and activists, accepts crypto
+- **[Flokinet](https://flokinet.is/)** — privacy-focused, also has Romania and Netherlands nodes
+
+**DNS registrar:** Avoid US-based registrars (GoDaddy, Namecheap, etc.) — domains registered there can be seized via US court order regardless of where the server is. Use a registrar in Iceland, Netherlands, or another non-US jurisdiction.
+
+**Payment:** If operational security matters, both 1984 and Flokinet accept cryptocurrency. Pay with a wallet not linked to your identity.
+
+---
+
 ## 1. Install system dependencies
 
 ```bash
@@ -78,10 +95,11 @@ curl http://yourdomain.example.com/api/health
 
 ## Environment variables (optional overrides)
 
-| Variable     | Default     | Description              |
-|-------------|-------------|--------------------------|
-| `REDIS_HOST` | `127.0.0.1` | Redis hostname           |
-| `REDIS_PORT` | `6379`      | Redis port               |
+| Variable         | Default       | Description                                      |
+|-----------------|---------------|--------------------------------------------------|
+| `REDIS_HOST`     | `127.0.0.1`   | Redis hostname                                   |
+| `REDIS_PORT`     | `6379`        | Redis port                                       |
+| `ALLOWED_ORIGIN` | *(empty)*     | Lock CORS to your domain, e.g. `https://yourdomain.is` |
 
 Set them in the `[Service]` block of `icebreaker.service` as `Environment=KEY=value`.
 
