@@ -6,16 +6,40 @@ Requires=redis.service
 [Service]
 Type=simple
 User=icebreaker
+Group=icebreaker
 WorkingDirectory=/opt/icebreaker
 ExecStart=/opt/icebreaker/venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000 --workers 2
 Restart=on-failure
 RestartSec=5
 
-# Hardening
+# --- Process isolation ---
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# --- Filesystem: only allow writes to app directory ---
 ReadWritePaths=/opt/icebreaker
+
+# --- Capabilities: none needed (high port via nginx, not binding 80/443) ---
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# --- System call filter: allow only what a Python web service needs ---
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
