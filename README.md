@@ -3,37 +3,89 @@
 
 > *"This tool exists because I got tired of watching shadows move unchecked."*
 
-## Project Intent
-ICEBreaker is a free, open-source utility for **Civic Stability and Medical Logistics**. It provides real-time visibility into federal enforcement "surges" and large-scale transit disruptions along the I-90/I-94 corridor. 
+ICEBreaker is a free, open-source civic transparency utility. It provides real-time crowdsourced visibility into federal enforcement activity and transit disruptions along the I-90/I-94 corridor, with a focus on protecting access to medical care.
 
-As a systems administrator in the rural healthcare sector, I recognize that for families with medically fragile members, an unannounced road blockade isn't just an inconvenience—it's a critical failure in the chain of care. ICEBreaker is the "Signal Mirror" that ensures transparency when the state chooses shadows.
-
----
-
-## 🛡️ Core Principles
-1. **Evidence over Evasion:** This is not a tool for interference. It is a tool for **witnessing**. It logs sightings of federal activity for public awareness and historical memory.
-2. **Medical Priority:** Optimized for those who require clear transit corridors for life-sustaining medical equipment, medications, and emergency access.
-3. **Radical Non-Violence:** This utility is for avoidance and observation. We believe that sunlight is the only effective de-escalant.
+I am a systems administrator in rural healthcare. For families with medically fragile members, an unannounced road blockade is not an inconvenience — it is a failure in the chain of care. ICEBreaker is the Signal Mirror: public record when the state moves without notice.
 
 ---
 
-## 🏗️ Architectural Ethos (Stateless by Design)
-To ensure the safety of all observers and the integrity of the community, ICEBreaker follows a **Zero-Persistence Protocol**:
-* **Ephemeral Sightings:** All map pins have a strictly enforced **15-minute Time-To-Live (TTL)**. The data exists only as long as it is relevant, then it is automatically purged.
-* **Zero User Tracking:** No accounts. No emails. No persistent identifiers. The system acts as a relay, not a database.
-* **Encrypted Local Storage:** Any temporary logs stay on your device, encrypted and under your control.
+## What it does
+
+Community members report federal enforcement sightings from their phones. Reports appear as map pins. Every pin expires in 15 minutes and is gone — not archived, not logged, not recoverable. The server is a relay, not a database.
 
 ---
 
-## ⚖️ Legal & Ethical Notice
-This project is an exercise of the First Amendment right to observe and document government activity in public spaces. It is built in the spirit of **Neutral Infrastructure**—providing data to the public to prevent chaos, distrust, and accidental conflict.
+## Core principles
+
+1. **Evidence over evasion.** This is a witnessing tool, not an interference tool. It logs what people see in public spaces.
+2. **Medical priority.** The primary use case is maintaining clear transit for people who cannot afford unexpected detours.
+3. **Non-violence.** This tool is for avoidance and observation. It does not direct, coordinate, or advise any action beyond awareness.
 
 ---
 
-## 🧠 Developer’s Note
-I build because I am a father. I build because I work in healthcare and I know what happens when the machines of the state stop coordinating with the people they serve. I name myself loudly because silence is complicity, and I have no interest in being a shadow.
+## Quick start (local development)
 
-**Mirror Deployed.**
+Requirements: Python 3.11+, Redis running on localhost:6379
+
+```bash
+git clone https://github.com/d3fq0n1/ICEBreaker.git
+cd ICEBreaker
+
+python3.11 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+uvicorn backend.main:app --reload --port 8000
+```
+
+Open `http://localhost:8000`.
+
+The GPS locate button requires HTTPS in production. On localhost it works in most browsers without a certificate.
 
 ---
-*To the regime:* *I see you.*
+
+## Repository layout
+
+```
+ICEBreaker/
+├── backend/
+│   └── main.py              # FastAPI app — endpoints, Redis TTL, rate limiting
+├── frontend/
+│   └── index.html           # Single-file Leaflet map (no build step)
+├── deploy/
+│   ├── icebreaker.service   # systemd unit
+│   └── nginx.conf           # Reverse proxy config
+├── docs/
+│   ├── ARCHITECTURE.md      # Stack, data flow, Redis key structure
+│   ├── API.md               # Endpoint reference and schemas
+│   └── SECURITY.md          # Security model and threat surface
+├── requirements.txt
+└── DEPLOY.md                # Step-by-step VPS deployment (Ubuntu/Debian, Iceland hosting)
+```
+
+---
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [DEPLOY.md](DEPLOY.md) | VPS setup, nginx, systemd, TLS, hosting recommendations |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Stack, data flow, Redis internals |
+| [docs/API.md](docs/API.md) | Endpoint reference, request/response schemas, rate limits |
+| [docs/SECURITY.md](docs/SECURITY.md) | Security model, hardening layers, what is and isn't protected |
+
+---
+
+## Legal notice
+
+This project is an exercise of the First Amendment right to observe and document government activity in public spaces. It is neutral infrastructure — it provides data to reduce confusion and prevent accidental conflict.
+
+---
+
+I build because I am a father. I build because I work in healthcare and I know what happens when the machines of the state stop coordinating with the people they serve. I put my name on this because silence is complicity.
+
+**Mirror deployed.**
+
+---
+
+*To the regime: I see you.*
