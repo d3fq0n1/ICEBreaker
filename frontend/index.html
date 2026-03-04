@@ -2,203 +2,345 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>ICEBreaker — Signal Mirror</title>
 
-  <!-- Leaflet (CDN, pinned version) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0d1117;
-      color: #e6edf3;
-      height: 100dvh;
-      display: flex;
-      flex-direction: column;
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --blue: #58a6ff;
+      --green: #238636;
+      --green-hover: #2ea043;
+      --red: #f85149;
+      --sheet-peek: 220px;   /* collapsed sheet height */
+      --sheet-full: 88dvh;   /* expanded sheet height  */
     }
 
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
     header {
-      padding: 0.6rem 1rem;
-      background: #161b22;
-      border-bottom: 1px solid #30363d;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 44px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
-      gap: 1rem;
+      padding: 0 1rem;
+      gap: 0.75rem;
+      z-index: 900;
     }
 
-    header h1 {
-      font-size: 1rem;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      color: #58a6ff;
-    }
+    header h1 { font-size: 0.95rem; font-weight: 700; color: var(--blue); letter-spacing: 0.04em; }
+    header .subtitle { font-size: 0.7rem; color: var(--muted); }
 
-    header .subtitle {
-      font-size: 0.75rem;
-      color: #8b949e;
-    }
-
+    /* ── Map ──────────────────────────────────────────────────── */
     #map {
-      flex: 1;
+      position: fixed;
+      top: 44px; left: 0; right: 0; bottom: 0;
       z-index: 0;
     }
 
-    /* --- Report panel --- */
-    #panel {
+    /* ── Bottom sheet ─────────────────────────────────────────── */
+    #sheet {
       position: fixed;
-      bottom: 1rem;
-      right: 1rem;
-      width: 300px;
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      padding: 1rem;
-      z-index: 1000;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+      left: 0; right: 0; bottom: 0;
+      height: var(--sheet-full);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
+      z-index: 800;
+      transform: translateY(calc(var(--sheet-full) - var(--sheet-peek)));
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      /* safe area for phones with home indicator */
+      padding-bottom: env(safe-area-inset-bottom, 0px);
     }
 
-    #panel h2 { font-size: 0.875rem; margin-bottom: 0.75rem; color: #58a6ff; }
+    #sheet.open {
+      transform: translateY(0);
+    }
 
-    .form-row { margin-bottom: 0.5rem; }
+    /* drag handle */
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin: 10px auto 0;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
 
-    label { display: block; font-size: 0.75rem; color: #8b949e; margin-bottom: 0.25rem; }
+    .sheet-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 1rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    /* ── GPS button ───────────────────────────────────────────── */
+    #locate-btn {
+      width: 100%;
+      min-height: 52px;
+      background: #0d419d;
+      border: 1px solid var(--blue);
+      border-radius: 10px;
+      color: var(--blue);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+
+    #locate-btn:active { background: #1158c7; }
+
+    #locate-btn.acquired {
+      background: #0a3d0a;
+      border-color: #3fb950;
+      color: #3fb950;
+    }
+
+    #locate-btn.searching {
+      opacity: 0.7;
+      cursor: wait;
+    }
+
+    /* ── Location status ──────────────────────────────────────── */
+    #loc-status {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+      min-height: 1rem;
+    }
+
+    #loc-status.ok { color: #3fb950; }
+    #loc-status.err { color: var(--red); }
+
+    /* ── Tag grid ─────────────────────────────────────────────── */
+    .section-label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.25rem;
+    }
 
     .tag-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.35rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
     }
 
     .tag-btn {
+      min-height: 48px;
       background: #21262d;
-      border: 1px solid #30363d;
-      border-radius: 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
       color: #c9d1d9;
-      font-size: 0.7rem;
-      padding: 0.25rem 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 500;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
+      transition: background 0.12s, border-color 0.12s;
+      /* prevent text select on double-tap */
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     .tag-btn.active {
-      background: #1f6feb;
-      border-color: #58a6ff;
+      background: #1f4e8f;
+      border-color: var(--blue);
       color: #fff;
     }
+
+    /* tag-specific active colors */
+    .tag-btn[data-tag="road_block"].active,
+    .tag-btn[data-tag="checkpoint"].active  { background: #5a1a1a; border-color: #f85149; }
+    .tag-btn[data-tag="medical_delay"].active { background: #5a2a1a; border-color: #ff7b72; }
+    .tag-btn[data-tag="clear"].active        { background: #0a3d0a; border-color: #3fb950; color: #3fb950; }
+
+    /* ── Note field ───────────────────────────────────────────── */
+    #note-toggle {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 0.78rem;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    #note-wrap { display: none; }
+    #note-wrap.visible { display: block; }
 
     textarea {
       width: 100%;
-      background: #0d1117;
-      border: 1px solid #30363d;
-      border-radius: 4px;
-      color: #e6edf3;
-      font-size: 0.8rem;
-      padding: 0.4rem;
-      resize: vertical;
-      min-height: 60px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 16px; /* prevent iOS zoom */
+      padding: 0.5rem 0.6rem;
+      resize: none;
+      height: 72px;
+      margin-top: 0.4rem;
     }
 
-    textarea:focus { outline: none; border-color: #58a6ff; }
+    textarea:focus { outline: none; border-color: var(--blue); }
 
-    #coords-display {
-      font-size: 0.7rem;
-      color: #8b949e;
-      font-family: monospace;
-      margin-bottom: 0.5rem;
-    }
-
+    /* ── Submit ───────────────────────────────────────────────── */
     #submit-btn {
       width: 100%;
-      background: #238636;
+      min-height: 56px;
+      background: var(--green);
       border: none;
-      border-radius: 4px;
+      border-radius: 10px;
       color: #fff;
-      font-size: 0.85rem;
-      font-weight: 600;
-      padding: 0.55rem;
+      font-size: 1.05rem;
+      font-weight: 700;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: background 0.15s, opacity 0.15s;
+      flex-shrink: 0;
     }
 
-    #submit-btn:hover { background: #2ea043; }
-    #submit-btn:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+    #submit-btn:active { background: var(--green-hover); }
+    #submit-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
     #status-msg {
-      font-size: 0.72rem;
-      margin-top: 0.4rem;
+      font-size: 0.75rem;
+      text-align: center;
       min-height: 1rem;
       color: #3fb950;
     }
 
-    #status-msg.error { color: #f85149; }
+    #status-msg.error { color: var(--red); }
 
-    .ttl-bar {
-      height: 3px;
-      background: #238636;
-      border-radius: 2px;
-      transition: width 1s linear;
+    /* ── Desktop: sidebar panel instead of bottom sheet ──────── */
+    @media (min-width: 640px) {
+      #sheet {
+        position: fixed;
+        top: 44px; bottom: 0;
+        left: auto; right: 0;
+        width: 300px;
+        height: auto;
+        border-radius: 0;
+        border-top: none;
+        border-left: 1px solid var(--border);
+        transform: none !important;
+        transition: none;
+      }
+
+      .sheet-handle { display: none; }
+      .sheet-body { padding: 1rem; }
+
+      #map { right: 300px; }
     }
 
-    /* Leaflet popup override */
+    /* ── Leaflet popup ────────────────────────────────────────── */
     .leaflet-popup-content-wrapper {
-      background: #161b22;
-      color: #e6edf3;
-      border: 1px solid #30363d;
-      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
     }
-    .leaflet-popup-tip { background: #161b22; }
-    .leaflet-popup-content { font-size: 0.8rem; }
-    .popup-tags { margin-top: 0.3rem; display: flex; flex-wrap: wrap; gap: 0.2rem; }
+    .leaflet-popup-tip { background: var(--surface); }
+    .leaflet-popup-content { font-size: 0.82rem; }
+    .popup-tags { margin-top: 0.3rem; display: flex; flex-wrap: wrap; gap: 0.25rem; }
     .popup-tag {
-      background: #1f6feb;
-      border-radius: 3px;
-      padding: 0.1rem 0.4rem;
-      font-size: 0.65rem;
+      background: #1f4e8f;
+      border-radius: 4px;
+      padding: 0.15rem 0.45rem;
+      font-size: 0.7rem;
     }
-    .popup-ttl { margin-top: 0.4rem; color: #8b949e; font-size: 0.7rem; }
+    .popup-ttl { margin-top: 0.4rem; color: var(--muted); font-size: 0.7rem; }
+
+    /* ── GPS accuracy ring on map ─────────────────────────────── */
+    .accuracy-ring {
+      border-radius: 50%;
+      background: rgba(88, 166, 255, 0.12);
+      border: 1px solid rgba(88, 166, 255, 0.4);
+    }
   </style>
 </head>
 <body>
 
 <header>
   <h1>ICEBreaker</h1>
-  <span class="subtitle">Signal Mirror · I-90/I-94 Corridor · Pins expire in 15 min</span>
+  <span class="subtitle">Signal Mirror · Pins expire in 15 min</span>
 </header>
 
 <div id="map"></div>
 
-<div id="panel">
-  <h2>Report a Sighting</h2>
-  <div id="coords-display">Click the map to set location</div>
+<div id="sheet">
+  <div class="sheet-handle" id="sheet-handle"></div>
 
-  <div class="form-row">
-    <label>Tags</label>
-    <div class="tag-grid" id="tag-grid"></div>
+  <div class="sheet-body">
+
+    <!-- GPS locate -->
+    <button id="locate-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+      </svg>
+      Use My Location
+    </button>
+    <div id="loc-status">or tap the map to place a pin</div>
+
+    <!-- Tags -->
+    <div>
+      <div class="section-label">What do you see?</div>
+      <div class="tag-grid" id="tag-grid"></div>
+    </div>
+
+    <!-- Note (collapsed by default) -->
+    <div>
+      <button id="note-toggle">+ add a note</button>
+      <div id="note-wrap">
+        <textarea id="note-input" maxlength="280" placeholder="e.g. 3 vehicles, northbound shoulder…"></textarea>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <button id="submit-btn" disabled>Set location first</button>
+    <div id="status-msg"></div>
+
   </div>
-
-  <div class="form-row">
-    <label>Note (optional, 280 chars max)</label>
-    <textarea id="note-input" maxlength="280" placeholder="e.g. 3 vehicles, northbound shoulder…"></textarea>
-  </div>
-
-  <button id="submit-btn" disabled>Select a location first</button>
-  <div id="status-msg"></div>
 </div>
 
 <script>
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
 const API = "/api";
-const POLL_MS = 30_000;  // refresh pins every 30s
+const POLL_MS = 30_000;
+
 const TAGS = [
-  "checkpoint", "vehicles", "foot_patrol",
-  "air_asset", "road_block", "medical_delay", "clear"
+  "checkpoint", "road_block", "vehicles", "foot_patrol",
+  "air_asset", "medical_delay", "clear",
 ];
+
 const TAG_COLORS = {
   checkpoint:    "#e3b341",
   vehicles:      "#f0883e",
@@ -209,9 +351,7 @@ const TAG_COLORS = {
   clear:         "#3fb950",
 };
 
-// ---------------------------------------------------------------------------
-// Map init — centered on WI/I-90-94 corridor
-// ---------------------------------------------------------------------------
+// ── Map ─────────────────────────────────────────────────────────
 const map = L.map("map", { zoomControl: true }).setView([44.0, -90.0], 7);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -219,21 +359,30 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 18,
 }).addTo(map);
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
+// ── State ────────────────────────────────────────────────────────
 let selectedLatLng = null;
 let activeTags = new Set();
-let activeMarkers = {};  // id -> marker
+let activeMarkers = {};
+let gpsMarker = null;
+let gpsRing = null;
 
-// ---------------------------------------------------------------------------
-// Tag buttons
-// ---------------------------------------------------------------------------
+// ── Sheet toggle (mobile) ────────────────────────────────────────
+const sheet = document.getElementById("sheet");
+const handle = document.getElementById("sheet-handle");
+
+handle.addEventListener("click", () => sheet.classList.toggle("open"));
+
+// Open sheet when user taps the map on mobile
+map.on("click", () => {
+  if (window.innerWidth < 640) sheet.classList.add("open");
+});
+
+// ── Tag buttons ──────────────────────────────────────────────────
 const tagGrid = document.getElementById("tag-grid");
 TAGS.forEach(tag => {
   const btn = document.createElement("button");
   btn.className = "tag-btn";
-  btn.textContent = tag.replace("_", " ");
+  btn.textContent = tag.replace(/_/g, " ");
   btn.dataset.tag = tag;
   btn.addEventListener("click", () => {
     btn.classList.toggle("active");
@@ -242,15 +391,100 @@ TAGS.forEach(tag => {
   tagGrid.appendChild(btn);
 });
 
-// ---------------------------------------------------------------------------
-// Map click → set location
-// ---------------------------------------------------------------------------
+// ── Note toggle ──────────────────────────────────────────────────
+document.getElementById("note-toggle").addEventListener("click", function() {
+  const wrap = document.getElementById("note-wrap");
+  wrap.classList.toggle("visible");
+  this.textContent = wrap.classList.contains("visible") ? "− remove note" : "+ add a note";
+});
+
+// ── Helpers ──────────────────────────────────────────────────────
+function setLocation(latlng) {
+  selectedLatLng = latlng;
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = false;
+  btn.textContent = "Submit Sighting";
+}
+
+function placeMapCrosshair(latlng) {
+  if (gpsMarker) { gpsMarker.remove(); gpsMarker = null; }
+  if (gpsRing) { gpsRing.remove(); gpsRing = null; }
+  gpsMarker = L.circleMarker(latlng, {
+    radius: 7, color: "#58a6ff", fillColor: "#58a6ff",
+    fillOpacity: 0.5, weight: 2,
+  }).addTo(map);
+}
+
+// ── GPS locate button ────────────────────────────────────────────
+const locateBtn = document.getElementById("locate-btn");
+const locStatus = document.getElementById("loc-status");
+
+locateBtn.addEventListener("click", () => {
+  if (!navigator.geolocation) {
+    locStatus.className = "err";
+    locStatus.textContent = "Geolocation not supported by this browser.";
+    return;
+  }
+
+  locateBtn.classList.add("searching");
+  locateBtn.textContent = "Locating…";
+  locStatus.className = "";
+  locStatus.textContent = "";
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      setLocation(latlng);
+      placeMapCrosshair(latlng);
+
+      // Accuracy ring
+      if (pos.coords.accuracy) {
+        gpsRing = L.circle(latlng, {
+          radius: pos.coords.accuracy,
+          className: "accuracy-ring",
+          interactive: false,
+        }).addTo(map);
+      }
+
+      map.setView(latlng, 14);
+
+      locateBtn.classList.remove("searching");
+      locateBtn.classList.add("acquired");
+      locateBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Location set`;
+
+      const acc = Math.round(pos.coords.accuracy);
+      locStatus.className = "ok";
+      locStatus.textContent = `±${acc}m accuracy`;
+
+      // Open sheet on mobile so tags are visible
+      sheet.classList.add("open");
+    },
+    err => {
+      locateBtn.classList.remove("searching");
+      locateBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+        </svg>
+        Use My Location`;
+      locStatus.className = "err";
+      locStatus.textContent = err.code === 1
+        ? "Location permission denied. Tap the map instead."
+        : "Couldn't get location. Tap the map instead.";
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+});
+
+// ── Map tap → set location (fallback / desktop) ──────────────────
 let crosshair = null;
 
 map.on("click", e => {
-  selectedLatLng = e.latlng;
-  document.getElementById("coords-display").textContent =
-    `${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+  setLocation(e.latlng);
 
   if (crosshair) crosshair.remove();
   crosshair = L.circleMarker(e.latlng, {
@@ -258,14 +492,22 @@ map.on("click", e => {
     fillOpacity: 0.4, weight: 2,
   }).addTo(map);
 
-  const btn = document.getElementById("submit-btn");
-  btn.disabled = false;
-  btn.textContent = "Submit Sighting";
+  // Reset GPS button to default if user overrides with map tap
+  if (locateBtn.classList.contains("acquired")) {
+    locateBtn.classList.remove("acquired");
+    locateBtn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+      </svg>
+      Use My Location`;
+    locStatus.className = "";
+    locStatus.textContent = "Pin placed from map tap";
+    if (gpsRing) { gpsRing.remove(); gpsRing = null; }
+  }
 });
 
-// ---------------------------------------------------------------------------
-// Submit
-// ---------------------------------------------------------------------------
+// ── Submit ───────────────────────────────────────────────────────
 document.getElementById("submit-btn").addEventListener("click", async () => {
   if (!selectedLatLng) return;
 
@@ -276,36 +518,57 @@ document.getElementById("submit-btn").addEventListener("click", async () => {
   statusEl.className = "";
   statusEl.textContent = "";
 
-  const payload = {
-    lat: selectedLatLng.lat,
-    lon: selectedLatLng.lng,
-    tags: [...activeTags],
-    note: document.getElementById("note-input").value.trim(),
-  };
-
   try {
     const resp = await fetch(`${API}/sightings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        lat: selectedLatLng.lat,
+        lon: selectedLatLng.lng,
+        tags: [...activeTags],
+        note: document.getElementById("note-input").value.trim(),
+      }),
     });
+
     if (!resp.ok) {
       const err = await resp.json();
       throw new Error(err.detail || resp.statusText);
     }
+
     const data = await resp.json();
-    statusEl.textContent = `Posted. Expires in ${Math.round(data.ttl_remaining / 60)} min.`;
+
+    // Haptic feedback on supported devices
+    if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
+
+    statusEl.textContent = `Submitted. Expires in ${Math.round(data.ttl_remaining / 60)} min.`;
 
     // Reset form
-    if (crosshair) { crosshair.remove(); crosshair = null; }
     selectedLatLng = null;
     activeTags.clear();
     document.querySelectorAll(".tag-btn.active").forEach(b => b.classList.remove("active"));
     document.getElementById("note-input").value = "";
+    if (crosshair) { crosshair.remove(); crosshair = null; }
+    if (gpsMarker) { gpsMarker.remove(); gpsMarker = null; }
+    if (gpsRing)   { gpsRing.remove();   gpsRing = null;   }
+
+    locateBtn.classList.remove("acquired");
+    locateBtn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+      </svg>
+      Use My Location`;
+    locStatus.className = "";
+    locStatus.textContent = "or tap the map to place a pin";
+
     btn.disabled = true;
-    btn.textContent = "Select a location first";
+    btn.textContent = "Set location first";
+
+    // Collapse sheet on mobile after submit
+    if (window.innerWidth < 640) sheet.classList.remove("open");
 
     await loadSightings();
+
   } catch (e) {
     statusEl.className = "error";
     statusEl.textContent = `Error: ${e.message}`;
@@ -314,31 +577,23 @@ document.getElementById("submit-btn").addEventListener("click", async () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// Load and render sightings
-// ---------------------------------------------------------------------------
+// ── Sightings polling ────────────────────────────────────────────
 function makeIcon(tags) {
-  const color = tags.length > 0
-    ? (TAG_COLORS[tags[0]] || "#8b949e")
-    : "#8b949e";
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="36" viewBox="0 0 24 36">
-      <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24C24 5.37 18.63 0 12 0z"
-            fill="${color}" stroke="#0d1117" stroke-width="1.5"/>
-      <circle cx="12" cy="12" r="5" fill="#0d1117" fill-opacity="0.5"/>
-    </svg>`;
-  return L.divIcon({
-    html: svg,
-    className: "",
-    iconSize: [24, 36],
-    iconAnchor: [12, 36],
-    popupAnchor: [0, -36],
-  });
+  const color = tags.length > 0 ? (TAG_COLORS[tags[0]] || "#8b949e") : "#8b949e";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="38" viewBox="0 0 24 36">
+    <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24C24 5.37 18.63 0 12 0z"
+          fill="${color}" stroke="#0d1117" stroke-width="1.5"/>
+    <circle cx="12" cy="12" r="5" fill="#0d1117" fill-opacity="0.4"/>
+  </svg>`;
+  return L.divIcon({ html: svg, className: "", iconSize: [26, 38], iconAnchor: [13, 38], popupAnchor: [0, -38] });
 }
 
-function formatTTL(seconds) {
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+function formatTTL(s) {
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
 async function loadSightings() {
@@ -346,52 +601,28 @@ async function loadSightings() {
     const resp = await fetch(`${API}/sightings`);
     if (!resp.ok) return;
     const sightings = await resp.json();
-
     const incoming = new Set(sightings.map(s => s.id));
 
-    // Remove expired markers
     for (const [id, marker] of Object.entries(activeMarkers)) {
-      if (!incoming.has(id)) {
-        map.removeLayer(marker);
-        delete activeMarkers[id];
-      }
+      if (!incoming.has(id)) { map.removeLayer(marker); delete activeMarkers[id]; }
     }
 
-    // Add/update markers
     sightings.forEach(s => {
-      if (activeMarkers[s.id]) return;  // already on map
-
+      if (activeMarkers[s.id]) return;
       const marker = L.marker([s.lat, s.lon], { icon: makeIcon(s.tags) });
-
-      const tagsHtml = s.tags.map(t =>
-        `<span class="popup-tag">${t.replace("_", " ")}</span>`
-      ).join("");
-
+      const tagsHtml = s.tags.map(t => `<span class="popup-tag">${t.replace(/_/g," ")}</span>`).join("");
       marker.bindPopup(`
         <div>
           <div class="popup-tags">${tagsHtml || "<em style='color:#8b949e'>no tags</em>"}</div>
           ${s.note ? `<div style="margin-top:0.3rem">${escapeHtml(s.note)}</div>` : ""}
           <div class="popup-ttl">Expires in ${formatTTL(s.ttl_remaining)}</div>
-        </div>
-      `);
-
+        </div>`);
       marker.addTo(map);
       activeMarkers[s.id] = marker;
     });
-  } catch (_) {
-    // silent fail on poll — don't disrupt UX
-  }
+  } catch (_) {}
 }
 
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-// Initial load + polling
 loadSightings();
 setInterval(loadSightings, POLL_MS);
 </script>
